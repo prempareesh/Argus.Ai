@@ -573,16 +573,24 @@ async function inspectSceneWithVisionAI() {
 
         // 1. Capture current video frame
         const snapshotBase64 = captureCameraSnapshot();
+        const userLanguage = localStorage.getItem('argus_language_preference') || 'en';
 
-        // 2. Query secure backend endpoint
+        // 2. Query secure backend endpoint with 35s timeout
+        const abortCtrl = new AbortController();
+        const clientTimeout = setTimeout(() => abortCtrl.abort(), 35000);
+
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 image: snapshotBase64,
-                mode: 'scene'
-            })
+                mode: 'scene',
+                language: userLanguage
+            }),
+            signal: abortCtrl.signal
         });
+
+        clearTimeout(clientTimeout);
 
         const data = await response.json();
 
@@ -602,7 +610,9 @@ async function inspectSceneWithVisionAI() {
 
     } catch (err) {
         console.error("Multimodal scene inspection error:", err);
-        const userNotice = `⚠️ Could not complete scene analysis: ${err.message}. Please check lighting and try again.`;
+        const isTimeout = err.name === 'AbortError';
+        const displayErr = isTimeout ? 'Vision AI request timed out. Please try again.' : err.message;
+        const userNotice = `⚠️ Could not complete scene analysis: ${displayErr}`;
         if (aiSceneContent) {
             aiSceneContent.innerText = userNotice;
         }
